@@ -11,7 +11,7 @@ declare(strict_types=1);
  * file that was distributed with this source code.
  */
 
-namespace Petebishop\ComposerRepositoryGenerator;
+namespace EvieSoftware\ComposerRepositoryGenerator;
 
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Process\Process;
@@ -25,78 +25,79 @@ use Symfony\Component\Process\Process;
  */
 class PackageParser
 {
-/**
- * @var Filesystem Filesystem instance for file operations
- */
-private Filesystem $filesystem;
+    /**
+     * @var Filesystem Filesystem instance for file operations
+     */
+    private Filesystem $filesystem;
 
-/**
- * @var string|null Temporary directory for cloning repositories
- */
-private ?string $tempDir = null;
+    /**
+     * @var string|null Temporary directory for cloning repositories
+     */
+    private ?string $tempDir = null;
 
-/**
- * Create a new PackageParser instance.
- *
- * @param Filesystem|null $filesystem Filesystem instance for file operations
- * @param string|null     $tempDir    Temporary directory for Git operations
- *
- * @throws \Symfony\Component\Filesystem\Exception\IOException If filesystem operations fail
- */
-public function __construct(
-    ?Filesystem $filesystem = null,
-    ?string $tempDir = null,
-) {
-    $this->filesystem = $filesystem ?? new Filesystem();
-    $this->tempDir = $tempDir ?? sys_get_temp_dir() . '/composer-repo-parser-' . uniqid();
+    /**
+     * Create a new PackageParser instance.
+     *
+     * @param Filesystem|null $filesystem Filesystem instance for file operations
+     * @param string|null     $tempDir    Temporary directory for Git operations
+     *
+     * @throws \Symfony\Component\Filesystem\Exception\IOException If filesystem operations fail
+     */
+    public function __construct(
+        ?Filesystem $filesystem = null,
+        ?string $tempDir = null,
+    ) {
+        $this->filesystem = $filesystem ?? new Filesystem();
+        $this->tempDir = $tempDir ?? sys_get_temp_dir() . '/composer-repo-parser-' . uniqid();
 
-    // Ensure the temporary directory exists
-    $this->filesystem->mkdir($this->tempDir);
-}
-
-/**
- * Destructor to ensure cleanup.
- *
- * @throws \Symfony\Component\Filesystem\Exception\IOException If cleanup fails
- */
-public function __destruct()
-{
-    $this->cleanup();
-}
-
-/**
- * Parse a composer.json file from a source repository.
- *
- * @param string               $source  Source URL or path
- * @param array<string, mixed> $options Parser options
- *
- * @throws \RuntimeException If parsing fails
- * @throws \Symfony\Component\Process\Exception\LogicException If process setup fails
- * @throws \Symfony\Component\Process\Exception\RuntimeException If process execution fails
- * @throws \Symfony\Component\Filesystem\Exception\IOException If filesystem operations fail
- *
- * @return array<string, mixed> Package information
- */
-public function parse(string $source, array $options = []): array
-{
-    return match ($this->determineSourceType($source)) {
-        'git' => $this->parseFromGit($source, $options),
-        'path' => $this->parseFromPath($source, $options),
-        default => throw new \RuntimeException("Unsupported source type for: $source"),
-    };
-}
-
-/**
- * Clean up temporary resources.
- *
- * @throws \Symfony\Component\Filesystem\Exception\IOException If filesystem operations fail
- */
-public function cleanup(): void
-{
-    if ($this->tempDir && $this->filesystem->exists($this->tempDir)) {
-        $this->filesystem->remove($this->tempDir);
+        // Ensure the temporary directory exists
+        $this->filesystem->mkdir($this->tempDir);
     }
-}
+
+    /**
+     * Destructor to ensure cleanup.
+     *
+     * @throws \Symfony\Component\Filesystem\Exception\IOException If cleanup fails
+     */
+    public function __destruct()
+    {
+        $this->cleanup();
+    }
+
+    /**
+     * Parse a composer.json file from a source repository.
+     *
+     * @param string               $source  Source URL or path
+     * @param array<string, mixed> $options Parser options
+     *
+     * @throws \RuntimeException                                             If parsing fails
+     * @throws \Symfony\Component\Process\Exception\LogicException           If process setup fails
+     * @throws \Symfony\Component\Process\Exception\RuntimeException         If process execution fails
+     * @throws \Symfony\Component\Process\Exception\InvalidArgumentException If process setup fails
+     * @throws \Symfony\Component\Filesystem\Exception\IOException           If filesystem operations fail
+     *
+     * @return array<string, mixed> Package information
+     */
+    public function parse(string $source, array $options = []): array
+    {
+        return match ($this->determineSourceType($source)) {
+            'git' => $this->parseFromGit($source, $options),
+            'path' => $this->parseFromPath($source, $options),
+            default => throw new \RuntimeException("Unsupported source type for: $source"),
+        };
+    }
+
+    /**
+     * Clean up temporary resources.
+     *
+     * @throws \Symfony\Component\Filesystem\Exception\IOException If filesystem operations fail
+     */
+    public function cleanup(): void
+    {
+        if ($this->tempDir && $this->filesystem->exists($this->tempDir)) {
+            $this->filesystem->remove($this->tempDir);
+        }
+    }
 
     /**
      * Determine the type of source (git, path, etc.).
@@ -120,16 +121,17 @@ public function cleanup(): void
      * @param string               $gitUrl  Git repository URL
      * @param array<string, mixed> $options Parser options
      *
- * @throws \RuntimeException If Git operations fail
- * @throws \Symfony\Component\Process\Exception\LogicException If process fails
- * @throws \Symfony\Component\Process\Exception\RuntimeException If process execution fails
- * @throws \Symfony\Component\Filesystem\Exception\IOException If filesystem operations fail
+ * @throws \RuntimeException                                             If Git operations fail
+ * @throws \Symfony\Component\Process\Exception\LogicException           If process fails
+ * @throws \Symfony\Component\Process\Exception\RuntimeException         If process execution fails
+ * @throws \Symfony\Component\Process\Exception\InvalidArgumentException If process setup fails
+ * @throws \Symfony\Component\Filesystem\Exception\IOException           If filesystem operations fail
  *
  * @return array<string, mixed> Package information
      */
     private function parseFromGit(string $gitUrl, array $options = []): array
     {
-        $repoDir = $this->cloneOrUpdateRepo($gitUrl);
+        $repoDir = $this->cloneOrUpdateRepo($gitUrl, $options);
         $versions = $this->getVersionsFromGit($repoDir, $options);
 
         if (empty($versions)) {
@@ -137,6 +139,7 @@ public function cleanup(): void
         }
 
         $packages = [];
+        $createArchives = $options['create_archives'] ?? false;
 
         foreach ($versions as $version => $ref) {
             try {
@@ -168,6 +171,19 @@ public function cleanup(): void
                     continue; // Skip packages without a name
                 }
 
+                // Create archive if requested
+                if ($createArchives && isset($options['archive_dir'])) {
+                    $archiveFile = $this->createArchive($repoDir, $packageName, $version, $options['archive_dir']);
+                    if ($archiveFile !== null) {
+                        $packageInfo['dist'] = [
+                            'type' => 'zip',
+                            'url' => $archiveFile,
+                            'reference' => $ref,
+                            'shasum' => hash_file('sha256', $archiveFile),
+                        ];
+                    }
+                }
+
                 $packages[$packageName][$version] = $packageInfo;
             } catch (\Exception $e) {
                 // Log error and continue with next version
@@ -183,23 +199,27 @@ public function cleanup(): void
     /**
      * Clone or update a Git repository.
      *
-     * @param string $gitUrl Git repository URL
+     * @param string               $gitUrl  Git repository URL
+     * @param array<string, mixed> $options Parser options
      *
-     * @throws \RuntimeException If Git operations fail
-     * @throws \Symfony\Component\Process\Exception\LogicException If process fails
-     * @throws \Symfony\Component\Process\Exception\RuntimeException If process execution fails
-     * @throws \Symfony\Component\Filesystem\Exception\IOException If filesystem operations fail
+     * @throws \RuntimeException                                             If Git operations fail
+     * @throws \Symfony\Component\Process\Exception\LogicException           If process fails
+     * @throws \Symfony\Component\Process\Exception\RuntimeException         If process execution fails
+     * @throws \Symfony\Component\Process\Exception\InvalidArgumentException If process setup fails
+     * @throws \Symfony\Component\Filesystem\Exception\IOException           If filesystem operations fail
      *
      * @return string Path to the cloned repository
      */
-    private function cloneOrUpdateRepo(string $gitUrl): string
+    private function cloneOrUpdateRepo(string $gitUrl, array $options = []): string
     {
-        $repoName = basename($gitUrl, '.git');
+        // Use MD5 of URL to ensure unique directory names even with auth tokens
+        $repoName = md5($gitUrl);
         $repoDir = $this->tempDir . '/' . $repoName;
 
         if ($this->filesystem->exists($repoDir . '/.git')) {
             // Repository already exists, update it
-            $process = new Process(['git', 'fetch', '--all'], $repoDir);
+            $process = new Process(['git', 'fetch', '--all', '--tags'], $repoDir);
+            $process->setTimeout(300); // 5 minutes timeout for large repos
             $process->run();
 
             if (!$process->isSuccessful()) {
@@ -208,6 +228,7 @@ public function cleanup(): void
         } else {
             // Clone the repository
             $process = new Process(['git', 'clone', $gitUrl, $repoDir]);
+            $process->setTimeout(300); // 5 minutes timeout for large repos
             $process->run();
 
             if (!$process->isSuccessful()) {
@@ -224,7 +245,7 @@ public function cleanup(): void
      * @param string               $repoDir Path to the Git repository
      * @param array<string, mixed> $options Parser options
      *
-     * @throws \Symfony\Component\Process\Exception\LogicException If process fails
+     * @throws \Symfony\Component\Process\Exception\LogicException   If process fails
      * @throws \Symfony\Component\Process\Exception\RuntimeException If process execution fails
      *
      * @return array<string, string> Map of version names to Git references
@@ -297,8 +318,8 @@ public function cleanup(): void
      * @param string $repoDir Path to the Git repository
      * @param string $ref     Git reference (tag, branch, commit)
      *
-     * @throws \RuntimeException If checkout fails
-     * @throws \Symfony\Component\Process\Exception\LogicException If process fails
+     * @throws \RuntimeException                                     If checkout fails
+     * @throws \Symfony\Component\Process\Exception\LogicException   If process fails
      * @throws \Symfony\Component\Process\Exception\RuntimeException If process execution fails
      */
     private function gitCheckout(string $repoDir, string $ref): void
@@ -407,5 +428,40 @@ public function cleanup(): void
         }
 
         return true;
+    }
+
+    /**
+     * Create a ZIP archive for a specific version.
+     *
+     * @param string $repoDir   Repository directory
+     * @param string $name      Package name
+     * @param string $version   Version string
+     * @param string $outputDir Output directory for archives
+     *
+     * @return string|null Archive file path or null if creation fails
+     */
+    private function createArchive(string $repoDir, string $name, string $version, string $outputDir): ?string
+    {
+        $archiveFile = sprintf(
+            '%s/%s-%s.zip',
+            rtrim($outputDir, '/'),
+            str_replace('/', '-', $name),
+            $version
+        );
+
+        try {
+            $process = new Process(['git', 'archive', '--format=zip', '--output=' . $archiveFile, $version], $repoDir);
+            $process->setTimeout(300); // 5 minutes timeout for large repositories
+            $process->run();
+
+            if (!$process->isSuccessful()) {
+                throw new \RuntimeException('Failed to create archive: ' . $process->getErrorOutput());
+            }
+
+            return $archiveFile;
+        } catch (\Exception $e) {
+            error_log("Failed to create archive for $name@$version: " . $e->getMessage());
+            return null;
+        }
     }
 }

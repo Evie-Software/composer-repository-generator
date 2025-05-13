@@ -11,17 +11,17 @@ declare(strict_types=1);
  * file that was distributed with this source code.
  */
 
-namespace Petebishop\ComposerRepositoryGenerator\Tests\Unit;
+namespace EvieSoftware\ComposerRepositoryGenerator\Tests\Unit;
 
-use Petebishop\ComposerRepositoryGenerator\PackageParser;
-use Petebishop\ComposerRepositoryGenerator\RepositoryGenerator;
+use EvieSoftware\ComposerRepositoryGenerator\PackageParser;
+use EvieSoftware\ComposerRepositoryGenerator\RepositoryGenerator;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Filesystem\Filesystem;
 
 /**
- * @covers \Petebishop\ComposerRepositoryGenerator\RepositoryGenerator
+ * @covers \EvieSoftware\ComposerRepositoryGenerator\RepositoryGenerator
  */
 class RepositoryGeneratorTest extends TestCase
 {
@@ -48,7 +48,7 @@ class RepositoryGeneratorTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        
+
         // Create a temporary directory for testing
         $this->tempDir = sys_get_temp_dir() . '/composer-repo-test-' . uniqid();
         mkdir($this->tempDir);
@@ -66,7 +66,7 @@ class RepositoryGeneratorTest extends TestCase
     protected function tearDown(): void
     {
         parent::tearDown();
-        
+
         // Clean up temporary directory
         if (is_dir($this->tempDir)) {
             $this->removeDirectory($this->tempDir);
@@ -192,7 +192,7 @@ class RepositoryGeneratorTest extends TestCase
         // Setup filesystem mock for directories
         $this->filesystem->expects($this->exactly(2))
             ->method('mkdir')
-            ->willReturnCallback(function($dirs) use ($config) {
+            ->willReturnCallback(function ($dirs) use ($config) {
                 if (is_array($dirs)) {
                     $this->assertContains($config['output_dir'], $dirs);
                     $this->assertContains($config['cache_dir'], $dirs);
@@ -201,20 +201,20 @@ class RepositoryGeneratorTest extends TestCase
                 }
                 return true;
             });
-            
+
         // Setup filesystem mock for file operations
         $this->filesystem->expects($this->atLeast(3))
             ->method('dumpFile')
-            ->willReturnCallback(function($path, $content) {
+            ->willReturnCallback(function ($path, $content) {
                 $this->assertIsString($path);
                 $this->assertNotEmpty($content);
                 $decoded = json_decode($content, true);
                 $this->assertIsArray($decoded);
-                
+
                 if (str_contains($path, 'packages.json')) {
                     $this->assertArrayHasKey('packages', $decoded);
                 }
-                
+
                 return true;
             });
 
@@ -255,7 +255,7 @@ class RepositoryGeneratorTest extends TestCase
         if ($objects === false) {
             return;
         }
-        
+
         foreach ($objects as $object) {
             if ($object === '.' || $object === '..') {
                 continue;

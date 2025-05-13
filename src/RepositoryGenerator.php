@@ -11,7 +11,7 @@ declare(strict_types=1);
  * file that was distributed with this source code.
  */
 
-namespace Petebishop\ComposerRepositoryGenerator;
+namespace EvieSoftware\ComposerRepositoryGenerator;
 
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
@@ -51,32 +51,47 @@ class RepositoryGenerator
      * @var callable(array<string,mixed>): bool|null Custom package filter callback
      */
     private $packageFilter = null;
-    
+
     /**
      * @var Filesystem Filesystem instance for file operations
      */
     private Filesystem $filesystem;
-    
+
     /**
      * @var PackageParser Package parser for reading composer.json files
      */
     private PackageParser $packageParser;
-    
+
     /**
      * @var LoggerInterface Logger for recording operations
      */
     private LoggerInterface $logger;
-    
+
     /**
      * @var array<string, mixed> Configuration options
      */
     private array $config;
 
     /**
+     * @var array<string, string> Map of GitHub tokens by hostname
+     */
+    private array $githubTokens = [];
+
+    /**
+     * @var bool Whether to proxy private packages
+     */
+    private bool $proxyPrivatePackages = false;
+
+    /**
+     * @var string|null Directory for storing proxied package archives
+     */
+    private ?string $archiveDir = null;
+
+    /**
      * Creates a new repository generator instance.
      *
      * @param array<string, mixed> $config Configuration options including output and cache directories
-     * 
+     *
      * @throws \Symfony\Component\Filesystem\Exception\IOException If directory creation fails
      */
     public function __construct(
@@ -91,6 +106,11 @@ class RepositoryGenerator
         $this->packageParser = $packageParser ?? new PackageParser($this->filesystem);
         $this->outputDir = $this->config['output_dir'] ?? sys_get_temp_dir() . '/composer-repository';
         $this->cacheDir = $this->config['cache_dir'] ?? $this->outputDir . '/cache';
+
+        // Initialize GitHub authentication
+        $this->githubTokens = $config['github_tokens'] ?? [];
+        $this->proxyPrivatePackages = $config['proxy_private_packages'] ?? false;
+        $this->archiveDir = $config['archive_dir'] ?? $this->outputDir . '/archives';
 
         // Ensure required directories exist
         $this->initializeDirectories();
@@ -150,7 +170,7 @@ class RepositoryGenerator
      * Set the output directory for the generated repository.
      *
      * @param string $outputDir Path to the output directory
-     * 
+     *
      * @throws \Symfony\Component\Filesystem\Exception\IOException If directory creation fails
      *
      * @return self
@@ -166,7 +186,7 @@ class RepositoryGenerator
      * Set the cache directory.
      *
      * @param string $cacheDir Path to the cache directory
-     * 
+     *
      * @throws \Symfony\Component\Filesystem\Exception\IOException If directory creation fails
      *
      * @return self
@@ -291,16 +311,56 @@ class RepositoryGenerator
     }
 
     /**
+     * Add a GitHub authentication token.
+     *
+     * @param string $token    GitHub authentication token
+     * @param string $hostname Optional GitHub hostname (defaults to github.com)
+     *
+     * @return self
+     */
+    public function addGitHubToken(string $token, string $hostname = 'github.com'): self
+    {
+        $this->githubTokens[$hostname] = $token;
+        return $this;
+    }
+
+    /**
+     * Enable or disable private package proxying.
+     *
+     * @param bool $enable Whether to enable proxying
+     *
+     * @throws \Symfony\Component\Filesystem\Exception\IOException If directory creation fails
+     *
+     * @return self
+     */
+    public function proxyPrivatePackages(bool $enable = true): self
+    {
+        $this->proxyPrivatePackages = $enable;
+
+        if ($enable && $this->archiveDir !== null) {
+            $this->filesystem->mkdir($this->archiveDir);
+        }
+
+        return $this;
+    }
+
+    /**
      * Create the necessary directory structure.
-     * 
+     *
      * @throws \Symfony\Component\Filesystem\Exception\IOException If directory creation fails
      */
     private function initializeDirectories(): void
     {
-        $this->filesystem->mkdir([
+        $directories = [
             $this->outputDir,
             $this->cacheDir,
-        ]);
+        ];
+
+        if ($this->proxyPrivatePackages) {
+            $directories[] = $this->archiveDir;
+        }
+
+        $this->filesystem->mkdir($directories);
     }
 
     /**
@@ -322,7 +382,7 @@ class RepositoryGenerator
 
     /**
      * Process all source repositories to collect package information.
-     * 
+     *
      * @throws \RuntimeException If no valid packages are found
      *
      * @return array<string, mixed> Collected package information
@@ -377,11 +437,12 @@ class RepositoryGenerator
      *
      * @param string               $url    Source URL
      * @param array<string, mixed> $config Source configuration
-     * 
- * @throws \RuntimeException When parsing or processing fails
- * @throws \Symfony\Component\Filesystem\Exception\IOException If filesystem operations fail
- * @throws \Symfony\Component\Process\Exception\LogicException If process setup fails
- * @throws \Symfony\Component\Process\Exception\RuntimeException If process execution fails
+     *
+ * @throws \RuntimeException                                             When parsing or processing fails
+ * @throws \Symfony\Component\Filesystem\Exception\IOException           If filesystem operations fail
+ * @throws \Symfony\Component\Process\Exception\LogicException           If process setup fails
+ * @throws \Symfony\Component\Process\Exception\RuntimeException         If process execution fails
+ * @throws \Symfony\Component\Process\Exception\InvalidArgumentException If process setup fails
      *
      * @return array<string, mixed> Packages from this source
      */
@@ -414,14 +475,23 @@ class RepositoryGenerator
             'include_dev_versions' => $config['include_dev_versions'] ?? false,
         ];
 
+        // Add archive creation options if proxying is enabled
+        if ($this->proxyPrivatePackages) {
+            $parserOptions['create_archives'] = true;
+            $parserOptions['archive_dir'] = $this->archiveDir;
+        }
+
         // Add our custom package filter if set
         if ($this->packageFilter !== null) {
             $parserOptions['filter_callback'] = $this->packageFilter;
         }
 
+        // Process GitHub URL to include authentication if available
+        $processedUrl = $this->processGitHubUrl($url);
+
         // Parse packages from the source
         $this->logger->debug('Parsing packages from source', ['url' => $url]);
-        $packages = $this->packageParser->parse($url, $parserOptions);
+        $packages = $this->packageParser->parse($processedUrl, $parserOptions);
 
         // Apply any source-specific filters
         if (isset($config['package_filter']) && is_callable($config['package_filter'])) {
@@ -447,7 +517,7 @@ class RepositoryGenerator
     /**
      * Apply a filter callback to packages.
      *
-     * @param array<string, mixed> $packages       Packages to filter
+     * @param array<string, mixed>                $packages       Packages to filter
      * @param callable(array<string,mixed>): bool $filterCallback Filter function that returns true to include a package
      *
      * @return array<string, mixed> Filtered packages
@@ -489,7 +559,7 @@ class RepositoryGenerator
         $filteredConfig = array_filter($config, function ($value) {
             return !is_callable($value);
         });
-        
+
         // Create a stable representation of the config for caching
         $configJson = json_encode($filteredConfig);
         if ($configJson === false) {
@@ -506,9 +576,9 @@ class RepositoryGenerator
      * Generate individual package metadata files for more efficient loading.
      *
      * @param array<string, mixed> $packages Collected package information
-     * 
+     *
      * @throws \Symfony\Component\Filesystem\Exception\IOException If filesystem operations fail
-     * @throws \RuntimeException If JSON encoding fails
+     * @throws \RuntimeException                                   If JSON encoding fails
      *
      * @return void
      */
@@ -544,7 +614,7 @@ class RepositoryGenerator
             if ($packageDataJson === false) {
                 throw new \RuntimeException('Failed to encode package metadata');
             }
-            
+
             // Write the package metadata
             $this->filesystem->dumpFile($metadataPath, $packageDataJson);
 
@@ -576,6 +646,94 @@ class RepositoryGenerator
             'providers-url' => 'p/%package%$%hash%.json',
             'available-packages' => array_keys($packages),
             'generated' => $timestamp->format(\DateTime::RFC3339),
+        ];
+    }
+
+    /**
+     * Process a GitHub repository URL to include authentication if available.
+     *
+     * @param string $url The GitHub repository URL
+     *
+     * @return string The processed URL
+     */
+    private function processGitHubUrl(string $url): string
+    {
+        if (!preg_match('#^https?://([^/]+)/(.+)\.git$#', $url, $matches)) {
+            return $url;
+        }
+
+        $hostname = $matches[1];
+        if (isset($this->githubTokens[$hostname])) {
+            return sprintf(
+                'https://%s@%s/%s.git',
+                $this->githubTokens[$hostname],
+                $hostname,
+                $matches[2]
+            );
+        }
+
+        return $url;
+    }
+
+    /**
+     * Create a proxied archive for a package version.
+     *
+     * @internal This method is used internally by processSource() when package proxying is enabled
+     *
+     * @used-by processSource()
+     *
+     * @see     RepositoryGenerator::processSource()
+     *
+     * @param string $repoDir     The repository directory
+     * @param string $packageName The package name
+     * @param string $version     The package version
+     *
+     * @throws \RuntimeException                                     If archive creation fails
+     * @throws \Symfony\Component\Process\Exception\LogicException   If process fails
+     * @throws \Symfony\Component\Process\Exception\RuntimeException If process execution fails
+     *
+     * @return string The archive file path
+     */
+    private function createPackageArchive(string $repoDir, string $packageName, string $version): string
+    {
+        $archiveFile = sprintf(
+            '%s/%s-%s.zip',
+            $this->archiveDir,
+            str_replace('/', '-', $packageName),
+            $version
+        );
+
+        $process = new Process(['git', 'archive', '--format=zip', '--output=' . $archiveFile, $version], $repoDir);
+        $process->run();
+
+        if (!$process->isSuccessful()) {
+            throw new \RuntimeException('Failed to create package archive: ' . $process->getErrorOutput());
+        }
+
+        return $archiveFile;
+    }
+
+    /**
+     * Update package metadata to use proxied archives.
+     *
+     * @internal This method is used internally by processSource() when package proxying is enabled
+     *
+     * @used-by processSource()
+     *
+     * @see     RepositoryGenerator::processSource()
+     *
+     * @param array<string, mixed> &$packageData The package data to update
+     * @param string               $archiveFile  The archive file path
+     *
+     * @return void
+     */
+    private function updatePackageDistUrls(array &$packageData, string $archiveFile): void
+    {
+        $relativePath = str_replace($this->outputDir, '', $archiveFile);
+        $packageData['dist'] = [
+            'type' => 'zip',
+            'url' => $relativePath,
+            'reference' => $packageData['source']['reference'] ?? '',
         ];
     }
 }

@@ -28,8 +28,8 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
-use Petebishop\ComposerRepositoryGenerator\PackageParser;
-use Petebishop\ComposerRepositoryGenerator\RepositoryGenerator;
+use EvieSoftware\ComposerRepositoryGenerator\PackageParser;
+use EvieSoftware\ComposerRepositoryGenerator\RepositoryGenerator;
 use Symfony\Component\Filesystem\Filesystem;
 
 // Step 1: Set up logging

@@ -21,7 +21,7 @@ A PHP library for dynamically generating Composer repositories without requiring
 You can install the package via composer:
 
 ```bash
-composer require petebishop/composer-repository-generator
+composer require evie-software/composer-repository-generator
 ```
 
 ## Basic Usage
@@ -31,7 +31,7 @@ composer require petebishop/composer-repository-generator
 
 require_once 'vendor/autoload.php';
 
-use Petebishop\ComposerRepositoryGenerator\RepositoryGenerator;
+use EvieSoftware\ComposerRepositoryGenerator\RepositoryGenerator;
 
 // Configure the generator
 $config = [
@@ -133,6 +133,84 @@ $generator = new RepositoryGenerator(
     config: ['output_dir' => __DIR__ . '/output'],
     logger: $logger
 );
+```
+
+## Private Repository Support
+
+### GitHub Token Authentication
+
+You can provide GitHub tokens to access private repositories:
+
+```php
+$config = [
+    'output_dir' => __DIR__ . '/output/repository',
+    'github_tokens' => [
+        'github.com' => 'your-github-token',
+        'github.internal.company.com' => 'internal-github-token',
+    ],
+];
+
+$generator = new RepositoryGenerator($config);
+
+// Or add tokens after initialization
+$generator->addGitHubToken('your-github-token');
+$generator->addGitHubToken('internal-token', 'github.internal.company.com');
+```
+
+### Package Proxying
+
+For users who don't have direct access to private repositories, you can enable package proxying:
+
+```php
+$config = [
+    'output_dir' => __DIR__ . '/output/repository',
+    'proxy_private_packages' => true,
+    'archive_dir' => __DIR__ . '/archives', // Optional, defaults to output_dir/archives
+];
+
+$generator = new RepositoryGenerator($config);
+$generator->proxyPrivatePackages(true);
+```
+
+When proxying is enabled:
+- Package archives are downloaded and stored locally
+- Distribution URLs in packages.json point to your repository
+- Users only need access to your repository, not the original sources
+- Archives are cached for better performance
+
+### Security Considerations
+
+When using private repository support:
+
+1. **Token Security**
+   - Use environment variables or secure configuration management
+   - Never commit tokens to version control
+   - Use tokens with minimal required permissions
+
+2. **Proxy Security**
+   - Ensure proper access control on your repository
+   - Regularly rotate GitHub tokens
+   - Monitor repository access logs
+   - Consider implementing additional authentication for archive downloads
+
+Example using environment variables:
+
+```php
+$config = [
+    'output_dir' => __DIR__ . '/output/repository',
+    'github_tokens' => [
+        'github.com' => getenv('GITHUB_TOKEN'),
+    ],
+    'proxy_private_packages' => true,
+];
+
+$generator = new RepositoryGenerator($config);
+
+// Add private repository
+$generator->addSource('https://github.com/your-org/private-repo.git');
+
+// Generate repository with proxied archives
+$packagesJsonPath = $generator->generate();
 ```
 
 ## API Documentation

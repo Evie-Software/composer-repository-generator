@@ -1,5 +1,5 @@
 {
-    "name": "petebishop/composer-repository-generator",
+    "name": "evie-software/composer-repository-generator",
     "description": "Dynamic Composer repository generator library without requiring Satis binary",
     "type": "library",
     "license": "MIT",
@@ -11,25 +11,25 @@
         "private",
         "packages"
     ],
-    "homepage": "https://github.com/petebishop/composer-repository-generator",
+    "homepage": "https://github.com/Evie-Software/composer-repository-generator",
     "support": {
-        "issues": "https://github.com/petebishop/composer-repository-generator/issues",
-        "source": "https://github.com/petebishop/composer-repository-generator"
+        "issues": "https://github.com/Evie-Software/composer-repository-generator/issues",
+        "source": "https://github.com/Evie-Software/composer-repository-generator"
     },
     "autoload": {
         "psr-4": {
-            "Petebishop\\ComposerRepositoryGenerator\\": "src/"
+            "EvieSoftware\\ComposerRepositoryGenerator\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Petebishop\\ComposerRepositoryGenerator\\Tests\\": "tests/"
+            "EvieSoftware\\ComposerRepositoryGenerator\\Tests\\": "tests/"
         }
     },
     "authors": [
         {
             "name": "Pete Bishop",
-            "email": "pete@example.com"
+            "email": "peter.bishop@evie.software"
         }
     ],
     "require": {
