@@ -3,7 +3,7 @@
 $header = <<<'EOF'
 This file is part of the Composer Repository Generator package.
 
-(c) Pete Bishop <pete@example.com>
+(c) Pete Bishop <peter.bishop@evie.software>
 
 For the full copyright and license information, please view the LICENSE
 file that was distributed with this source code.
