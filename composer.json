@@ -1,0 +1,83 @@
+{
+    "name": "petebishop/composer-repository-generator",
+    "description": "Dynamic Composer repository generator library without requiring Satis binary",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "composer",
+        "repository",
+        "generator",
+        "satis",
+        "private",
+        "packages"
+    ],
+    "homepage": "https://github.com/petebishop/composer-repository-generator",
+    "support": {
+        "issues": "https://github.com/petebishop/composer-repository-generator/issues",
+        "source": "https://github.com/petebishop/composer-repository-generator"
+    },
+    "autoload": {
+        "psr-4": {
+            "Petebishop\\ComposerRepositoryGenerator\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Petebishop\\ComposerRepositoryGenerator\\Tests\\": "tests/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Pete Bishop",
+            "email": "pete@example.com"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "composer/composer": "^2.0",
+        "psr/log": "^3.0",
+        "symfony/filesystem": "^6.0|^7.0",
+        "symfony/finder": "^6.0|^7.0",
+        "symfony/process": "^6.0|^7.0"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.49",
+        "monolog/monolog": "^3.5",
+        "phpstan/phpstan": "^1.10",
+        "phpunit/phpunit": "^10.0"
+    },
+    "scripts": {
+        "test": "phpunit",
+        "test-coverage": "phpunit --coverage-html build/coverage",
+        "cs-check": "php-cs-fixer fix --dry-run --diff",
+        "cs-fix": "php-cs-fixer fix",
+        "phpstan": "phpstan analyse",
+        "analyze": [
+            "@cs-check",
+            "@phpstan",
+            "@test"
+        ],
+        "ci": [
+            "@cs-check",
+            "@phpstan",
+            "@test-coverage"
+        ]
+    },
+    "scripts-descriptions": {
+        "test": "Run unit tests",
+        "test-coverage": "Run unit tests with coverage report",
+        "cs-check": "Check code style",
+        "cs-fix": "Fix code style issues",
+        "phpstan": "Run static analysis with PHPStan",
+        "analyze": "Run all code quality checks",
+        "ci": "Run all checks with coverage report"
+    },
+    "minimum-stability": "stable",
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "composer/package-versions-deprecated": true
+        }
+    }
+}
+
